@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+   <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width">
+      <title>AIRFOILEXP</title>
+      <script src=
+         "https://code.jquery.com/jquery-3.5.1.js"></script>
+      <style>
+         /* (A) SEARCH BOX */
+         #AFfilter {
+         box-sizing: border-box;
+         position:absolute;
+         top: 15px;
+         left: 15px;
+         height: 20px;
+         width: 164px;
+         margin-bottom: 0px;
+         padding: 0px;
+         }
+         #AFnamelist li {
+         padding: 0px;
+         border-bottom: 1px solid #e7e7e7;
+         }
+         #AFnamelist li.hide { display: none; }
+         nav ul{height:600px; width:164px;
+         list-style: none;
+         padding-left: 0;
+         padding-top: 0;}
+         nav ul{overflow:hidden; overflow-y:scroll;}
+         .selected {
+         background: #189ACA;
+         color: #ffffff;
+         }
+         li {
+         cursor: pointer;
+         }
+      </style>
+   </head>
+   <body>
+      <canvas id="BorderCanvas"></canvas>
+      <script type="text/javascript">
+         var canvas = document.getElementById('BorderCanvas');
+         if (canvas.getContext) {
+           var context = canvas.getContext('2d');
+           var xsize = 880;
+           var ysize = 1425;
+           canvas.style.width = xsize + "px";
+           canvas.style.height = ysize + "px";
+           // Set actual size in memory (scaled to account for extra pixel density).
+           var scale = 1; //window.devicePixelRatio; // Change to 1 on retina screens to see blurry canvas.
+           canvas.width = Math.floor(xsize * scale);
+           canvas.height = Math.floor(ysize * scale);
+           // Normalize coordinate system to use css pixels.
+           context.scale(scale, scale);
+           context.clearRect(0, 0, canvas.width / scale, canvas.height / scale);
+           context.beginPath();
+           context.lineJoin = "round";
+           context.moveTo(0, 0);
+           context.lineTo(canvas.width / scale, 0);
+           context.strokeStyle = '#00508a';
+           context.stroke();
+           ////
+           context.beginPath();
+           context.lineJoin = "round";
+           context.moveTo(0, 0);
+           context.lineTo(0, canvas.height / scale);
+           context.stroke();
+           ////
+           context.beginPath();
+           context.lineJoin = "round";
+           context.moveTo(canvas.width / scale, canvas.height / scale);
+           context.lineTo(canvas.width / scale, 0);
+           context.stroke();
+           ////
+           context.beginPath();
+           context.lineJoin = "round";
+           context.moveTo(canvas.width / scale, canvas.height / scale);
+           context.lineTo(0, canvas.height / scale);
+           context.stroke();
+           ////
+         }
+      </script>
+      <input type="text" id="AFfilter" placeholder="Search..."/>
+      <nav>
+         <ul id="AFnamelist" style="position:absolute;left:15px;top:23px;height:580px;font:12px Garamond;border: 1px solid #00508a">
+         </ul>
+      </nav>
+      <nav>
+         <ul id="Titlebox" style="position:absolute;left:180px;top:479px;width:700px;height:20px;font:16px Garamond;border: 1px solid #00508a">
+            <li id="AFtitle">AIRFOIL NAME</li>
+         </ul>
+      </nav>
+      <nav>
+         <ul id="DescBox" style="position:absolute;left:180px;top:502px;width:700px;height:99px;font:14px Garamond;border: 1px solid #00508a">
+            <li id="AFdescBuffer">Description:</li>
+            <li id="AFdesc">>></li>
+         </ul>
+      </nav>
+      <canvas id="AllFoilsCanvas" width="700px" height="500px"  style="position:absolute;top:15px;left:180px;border: 1px solid #00508a";></canvas>
+      <canvas id="SelectedFoilCanvas" width="700px" height="500px"  style="position:absolute;top:15px;left:180px;border: 1px solid #00508a";></canvas>
+      <script type="text/javascript">
+         console.clear();
+          
+         let response_promise = fetch("https://raw.githubusercontent.com/aeromidd/vizdata/main/AIRFOILDATA.json");
+           
+           document.addEventListener("DOMContentLoaded", function() {
+           response_promise.then(response => response.json().then(AFDATA => {
+             
+           var excList = [];
+                     /*
+                     ['NACA-1 COWL'],
+                     ['NACA 16-006'],
+                     ['NACA 1410 Airfoil'],
+                     ['NACA 1408 Airfoil'],
+                     ['NACA 1412 Airfoil'],
+                     ['NASA SC(2)-0402 AIRFOIL'],
+                     ];
+                     */
+           drawAllFoils();
+            
+           //List: clicking behaviour  
+             
+           let AFNAMES = ["LOADING...", "Please wait."]; 
+              AFNAMES = AFDATA[AFDATA.length-1].AZLIST;
+           let AFFILENAMES = AFDATA[AFDATA.length-1].FNLIST;
+             //console.log(AFDATA[AFDATA.length-1])
+             let list = document.getElementById("AFnamelist");
+             
+           for (i = 0; i < AFNAMES.length-1; i++) {
+             let li = document.createElement("li");
+             li.innerText = AFNAMES[i];
+             li.AFFN = AFFILENAMES[i];
+             list.appendChild(li);
+           }
+           AFnamelist.onclick = function(event) {
+             if (event.target.tagName != "LI") return;
+               
+         
+             if (event.ctrlKey || event.metaKey) {
+               toggleSelect(event.target);
+             } else {
+               singleSelect(event.target);
+             }
+             drawSelectedFoil(event.target.AFFN);
+         
+           }
+           // prevent unneeded selection of list elements on clicks
+           AFnamelist.onmousedown = function() {
+             return false;
+           };
+         
+           function toggleSelect(li) {
+             li.classList.toggle('selected');
+           }
+         
+           function singleSelect(li) {
+             let selected = AFnamelist.querySelectorAll('.selected');
+             for(let elem of selected) {
+               elem.classList.remove('selected');
+             }
+             li.classList.add('selected');
+           }
+             //SEARCH FILTER:
+             
+             AFfilter.oninput = function(event){
+         var filter = document.getElementById("AFfilter"), // search box
+             SAFlist = document.querySelectorAll("#AFnamelist li"); // all list items
+         // (B) ATTACH KEY UP LISTENER TO SEARCH BOX
+         filter.onkeyup = () => {
+           // (B1) GET CURRENT SEARCH TERM
+           let search = filter.value.toLowerCase();
+         
+           // (B2) LOOP THROUGH LIST ITEMS - ONLY SHOW THOSE THAT MATCH SEARCH
+           for (let i of SAFlist) {
+             let item = i.innerHTML.toLowerCase();
+             if (item.indexOf(search) == -1) { i.classList.add("hide"); }
+             else { i.classList.remove("hide"); }
+           }
+         }
+             };
+             
+           //plotting background airfoils (all)
+             
+           function drawAllFoils(){
+           //format:
+           //   0      1       2       3       4
+           //[[name],[desc],[xvals],[yvals],[Tvals])
+           //T:[max(top) min(top) mean(top) max(bottom) min(bottom) mean(bottom) max(thick) min(thick) mean(thick)];
+             
+           var canvas = document.getElementById('AllFoilsCanvas');
+           var context = canvas.getContext('2d');
+           var xsize = 700;
+           var ysize = 500;
+           canvas.style.width = xsize + "px";
+           canvas.style.height = ysize + "px";
+           // Set actual size in memory (scaled to account for extra pixel density).
+           var scale = 2;//window.devicePixelRatio; // Change to 1 on retina screens to see blurry canvas.
+           canvas.width = Math.floor(xsize * scale);
+           canvas.height = Math.floor(ysize * scale);
+           
+           // Normalize coordinate system to use css pixels.
+           context.scale(scale, scale);
+           
+           context.clearRect(0, 0, canvas.width/scale, canvas.height/scale);
+           
+           let zoom = 670;
+           let cx = 15;
+           let cy = 250;
+           
+           //n = 1588
+           
+           let n = AFDATA.length;
+         
+           //exclusion list:
+           
+           var excludeflag
+           let bc = 0.84;
+         for (i = 0; i < n; i++) {
+           excludeflag = false;
+           for (j = 0; j < excList.length-1; j++) {
+             if (AFDATA[i].name == (excList[j][0])){
+               excludeflag = true;
+             }
+           }
+           if (excludeflag == false){
+             context.lineWidth = 1;
+             context.beginPath();
+             context.lineJoin = "round";
+             context.moveTo(cx,cy);
+           for (j = 0; j < AFDATA[i].x.length-1; j++) {
+               context.lineTo(cx+Number(AFDATA[i].x[j])*zoom,cy-Number(AFDATA[i].y[j])*zoom);
+             }
+           context.strokeStyle = 'rgb('+ (bc-bc*(i+1)/n)*255+','+(bc-(bc-0.3125)*(i+1)/n)*255+','+(bc-(bc-0.5391)*(i+1)/n)*255+')';
+           //context.strokeStyle = 'rgb(0,80,138)';
+           context.globalAlpha = 1;  
+           //context.filter = 'blur(4px)';
+           context.stroke();
+           context.closePath();
+           }
+         }
+           }
+         function drawSelectedFoil(selectedFN){
+             
+           var canvas = document.getElementById('SelectedFoilCanvas');
+           var context = canvas.getContext('2d');
+           var xsize = 700;
+           var ysize = 500;
+           canvas.style.width = xsize + "px";
+           canvas.style.height = ysize + "px";
+           // Set actual size in memory (scaled to account for extra pixel density).
+           var scale = 2;//window.devicePixelRatio; // Change to 1 on retina screens to see blurry canvas.
+           canvas.width = Math.floor(xsize * scale);
+           canvas.height = Math.floor(ysize * scale);
+           
+           // Normalize coordinate system to use css pixels.
+           context.scale(scale, scale);
+           
+           context.clearRect(0, 0, canvas.width/scale, canvas.height/scale);
+           
+           let zoom = 670;
+           let cx = 15;
+           let cy = 250;
+           
+           //n = 1588
+           
+           let n = AFDATA.length;
+         
+           //exclusion list:
+           
+           let bc = 0.84;
+         for (i = 0; i < n; i++) {
+             if (AFDATA[i].filename == (selectedFN)){
+               AFtitle.innerText = AFDATA[i].name;
+               AFdesc.innerText = AFDATA[i].desc;
+               //console.log(AFDATA[i].name)
+               //console.log(AFDATA[i].desc)
+             context.lineWidth = 2;
+             context.beginPath();
+             context.lineJoin = "round";
+             context.moveTo(cx+Number(AFDATA[i].x[0])*zoom,cy-Number(AFDATA[i].y[0])*zoom);
+           for (j = 0; j < AFDATA[i].x.length-1; j++) {
+               context.lineTo(cx+Number(AFDATA[i].x[j])*zoom,cy-Number(AFDATA[i].y[j])*zoom);
+             }
+               context.strokeStyle = '#ffff00';
+               context.fillStyle = "rgb(24, 154, 202, 0.75)";
+           context.globalAlpha = 1;
+           context.stroke();
+           context.fill();
+           context.closePath();
+           }
+         }
+           }
+         }))}, false);
+           
+      </script>
+   </body>
+</html>
